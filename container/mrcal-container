@@ -1,0 +1,56 @@
+#!/bin/bash
+# Runs an mrcal tool inside the mrcal container image. Invoked through a symlink
+# named after the tool (see "make links"), or directly as
+#
+#   mrcal-container TOOL [ARGS...]
+#
+# The current directory is mounted at the same path inside the container, so
+# relative and absolute paths under it work as they would on the host.
+
+set -e
+
+IMAGE=${MRCAL_CONTAINER_IMAGE:-mrcal}
+ENGINE=${MRCAL_CONTAINER_ENGINE:-podman}
+
+tool=${0##*/}
+if [[ $tool == mrcal-container ]]; then
+    if [[ $# -eq 0 ]]; then
+        echo "Usage: $tool TOOL [ARGS...]" >&2
+        exit 1
+    fi
+    tool=$1
+    shift
+fi
+
+# Always forward stdin so the tools work in pipelines; allocate a terminal only
+# when there is one
+tty=(-i)
+[[ -t 0 && -t 1 ]] && tty+=(-t)
+
+# Files written by the tool are owned by the calling user
+if [[ ${ENGINE##*/} == podman ]]; then
+    user=(--userns=keep-id)
+else
+    user=(--user "$(id -u):$(id -g)")
+fi
+
+# X11 forwarding, so the plotting and visualization tools can open windows.
+# Sharing the host's network and hostname lets every display form work: TCP
+# displays (ssh -X sets DISPLAY=localhost:10.0) are reachable, and the host's X
+# cookie, which is keyed by hostname, matches
+x11=()
+if [[ -n $DISPLAY ]]; then
+    x11=(-e DISPLAY --network=host --uts=host)
+    [[ -d /tmp/.X11-unix ]] && x11+=(-v /tmp/.X11-unix:/tmp/.X11-unix:ro)
+    xauthfile=${XAUTHORITY:-$HOME/.Xauthority}
+    [[ -r $xauthfile ]] && \
+        x11+=(-e XAUTHORITY=/tmp/.Xauthority -v "$xauthfile:/tmp/.Xauthority:ro")
+fi
+
+# label=disable: don't relabel the user's directory for SELinux
+exec "$ENGINE" run --rm "${tty[@]}"     \
+     --security-opt label=disable       \
+     "${user[@]}"                       \
+     "${x11[@]}"                        \
+     -v "$PWD:$PWD" -w "$PWD"           \
+     "$IMAGE" "$tool" "$@"

@@ -1,0 +1,70 @@
+# Containerized build + runtime environment for mrcal.
+#
+# mrcal targets Debian, so we build on Debian/trixie where the dependencies are
+# packaged. The build context is the repo root. See container/Makefile:
+#
+#   make -C container build   # podman build -t mrcal -f container/Containerfile .
+#   make -C container links   # put wrappers for the mrcal tools into ~/.local/bin
+#
+# Optional: --build-arg USE_LIBELAS=1 (pulls libelas from Debian non-free)
+
+FROM docker.io/library/debian:trixie
+
+ARG USE_LIBELAS=0
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Debian/trixie's own mrbuild and libdogleg are too old for mrcal master. The
+# upstream mrcal APT repo (see doc/install.org) carries current ones.
+# python3-setuptools provides the distutils that trixie's numpysane imports
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    echo 'deb [trusted=yes] https://mrcal.secretsauce.net/packages/trixie/public/ trixie main' \
+      > /etc/apt/sources.list.d/mrcal.list && \
+    elas= && \
+    if [ "$USE_LIBELAS" != 0 ]; then \
+      sed -i 's/^Components: main$/Components: main non-free/' /etc/apt/sources.list.d/debian.sources; \
+      elas=libelas-dev; \
+    fi && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      mrbuild \
+      re2c \
+      libdogleg-dev \
+      libsuitesparse-dev \
+      liblapack-dev \
+      libpng-dev \
+      libjpeg-dev \
+      libstb-dev \
+      python3-dev \
+      python3-numpy \
+      python3-numpysane \
+      python3-setuptools \
+      python3-scipy \
+      python3-gnuplotlib \
+      python3-opencv \
+      python3-yaml \
+      python3-shapely \
+      gnuplot-x11 \
+      python3-fltk \
+      python3-gl-image-display \
+      libgl1-mesa-dri \
+      libglx-mesa0 \
+      vnlog \
+      python3-vnlog \
+      mrgingham \
+      zsh \
+      $elas && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src/mrcal
+COPY . .
+
+# "make clean" drops any build output copied in from the host
+RUN make clean && make -j"$(nproc)"
+
+# Use the in-tree build directly: the CLI tools find the Python package and
+# libmrcal.so through these paths
+ENV PATH=/src/mrcal:$PATH \
+    PYTHONPATH=/src/mrcal \
+    LD_LIBRARY_PATH=/src/mrcal

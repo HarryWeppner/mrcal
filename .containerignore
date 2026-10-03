@@ -1,0 +1,30 @@
+# Build output from the host (patterns from .gitignore) is left out so a host
+# build doesn't invalidate the build layer; "make clean" in the Containerfile is
+# a safety net. The rest doesn't affect the build. .dockerignore is a symlink
+# to this file, for docker
+**/*.o
+**/*.d
+**/*.so*
+**/*.docstring.h
+**/*generated*
+**/*GENERATED*
+**/*.pyc
+**/__pycache__
+**/*.pickle
+!test/data/*.pickle
+test/test-gradients
+test/test-lensmodel-string-manipulation
+test/test-cahvor
+test/test-parser-cameramodel
+test/test-heap
+python-cameramodel-converter-py-symbol-refs*
+mrbuild
+mrbuild-*
+.git
+.claude/
+.containerignore
+.dockerignore
+container/
+doc/*.org
+doc/out/
+*.md
